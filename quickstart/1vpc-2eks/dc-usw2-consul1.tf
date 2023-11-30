@@ -28,30 +28,44 @@ locals {
           "ec2_ssh_key" : var.ec2_key_pair_name,
           "cluster_endpoint_private_access" : true,
           "cluster_endpoint_public_access" : true,
-          "eks_min_size" : 3,
+          "eks_min_size" : 1,
           "eks_max_size" : 3,
-          "eks_desired_size" : 3           # used for pool size and consul replicas size
-          "eks_instance_type" : "m5.large" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
+          "eks_desired_size" : 1           # used for pool size and consul replicas size
+          "eks_instance_type" : "m5.xlarge" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
           #"service_ipv4_cidr" : "10.17.16.0/24" #Can't overlap with VPC CIDR
           "consul_helm_chart_template" : "values-server-sd.yaml"
           "consul_datacenter" : "dc1"
           "consul_type" : "server"
         }
-        "consul2" = {
-          "cluster_name" : "${var.prefix}-usw2-consul2",
-          "cluster_version" : var.eks_cluster_version,
-          "ec2_ssh_key" : var.ec2_key_pair_name,
-          "cluster_endpoint_private_access" : true,
-          "cluster_endpoint_public_access" : true,
-          "eks_min_size" : 1,
-          "eks_max_size" : 3,
-          "eks_desired_size" : 1           # used for pool size and consul replicas size
-          "eks_instance_type" : "m5.large" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
-          #"service_ipv4_cidr" : "10.17.16.0/24" #Can't overlap with VPC CIDR
-          "consul_helm_chart_template" : "values-server-sd.yaml"
-          "consul_datacenter" : "dc2"
-          "consul_type" : "server"
-        }
+        # app1 = {
+        #   "cluster_name" : "${var.prefix}-usw2-app1",
+        #   "cluster_version" : var.eks_cluster_version,
+        #   "ec2_ssh_key" : var.ec2_key_pair_name,
+        #   "cluster_endpoint_private_access" : true,
+        #   "cluster_endpoint_public_access" : true,
+        #   "eks_min_size" : 1,
+        #   "eks_max_size" : 3,
+        #   "eks_desired_size" : 1           # used for pool size and consul replicas size
+        #   "eks_instance_type" : "m5.large" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
+        #   "consul_helm_chart_template" : ""
+        #   "consul_datacenter" : ""
+        #   "consul_type" : ""
+        # }
+        # "consul2" = {
+        #   "cluster_name" : "${var.prefix}-usw2-consul2",
+        #   "cluster_version" : var.eks_cluster_version,
+        #   "ec2_ssh_key" : var.ec2_key_pair_name,
+        #   "cluster_endpoint_private_access" : true,
+        #   "cluster_endpoint_public_access" : true,
+        #   "eks_min_size" : 1,
+        #   "eks_max_size" : 3,
+        #   "eks_desired_size" : 1           # used for pool size and consul replicas size
+        #   "eks_instance_type" : "m5.large" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
+        #   #"service_ipv4_cidr" : "10.17.16.0/24" #Can't overlap with VPC CIDR
+        #   "consul_helm_chart_template" : "values-server-sd.yaml"
+        #   "consul_datacenter" : "dc2"
+        #   "consul_type" : "server"
+        # }
       }
       "ec2" = {
         "vm1" = {

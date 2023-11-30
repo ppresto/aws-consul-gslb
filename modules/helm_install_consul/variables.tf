@@ -11,6 +11,13 @@ variable "chart_name" {
   description = "Chart name to be installed"
 }
 
+variable "helm_release_enabled" {
+  type        = bool
+  default     = true
+  description = "Run helm deploy"
+}
+
+
 variable "chart_repository" {
   type        = string
   default     = "https://helm.releases.hashicorp.com"

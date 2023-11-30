@@ -13,6 +13,7 @@ resource "kubernetes_namespace" "consul" {
 }
 
 resource "helm_release" "consul_client" {
+  count = var.helm_release_enabled == true ? 1 : 0
   chart            = var.chart_name
   create_namespace = var.create_namespace
   name             = var.release_name
