@@ -4,7 +4,7 @@ metadata:
   name: default ## The name of the partition containing the service
 spec:
   services:
-    - name: "schema-registry"
+    - name: "httpbin"
       consumers:
-      - peer: dc1-default
+      - peer: west-default
 

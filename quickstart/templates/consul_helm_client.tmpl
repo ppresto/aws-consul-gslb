@@ -1,6 +1,7 @@
 module "consul_${cluster_name}" {
   source   = "../../../modules/helm_install_consul"
   providers = { aws = aws.${region_shortname} }
+  helm_release_enabled        = true
   release_name  = "${release_name}"
   chart_name         = "${consul_chart_name}"
   cluster_name         = "${cluster_name}"

@@ -12,7 +12,7 @@ install () {
     helm install istio-base istio/base -n istio-system --set defaultRevision=default
     #verify CRD installation
     helm ls -n istio-system
-    helm install istiod istio/istiod -n istio-system --wait
+    helm install istiod istio/istiod -n istio-system --debug --wait
     #verify istio discovery chart installation
     helm ls -n istio-system
     helm status istiod -n istio-system
@@ -24,123 +24,9 @@ install () {
     kubectl create namespace istio-ingress
     kubectl label namespace istio-ingress istio-injection=enabled
     kubectl get namespace -L istio-injection
-    helm install istio-ingress istio/gateway -n istio-ingress -f ${SCRIPT_DIR}/../examples/istio-ingress-gw/values.yaml --wait
+    helm install istio-ingress istio/gateway -n istio-ingress -f ${SCRIPT_DIR}/../examples/istio-ingress-gw/helm/values.yaml --debug --wait
 }
 
-deploy_web () {
-    kubectl apply -f - <<EOF
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: myservice
-  namespace: default
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: myservice
-  namespace: default
-  labels:
-    app: myservice
-    service: myservice
-spec:
-  selector:
-    app: myservice
-  ports:
-    - port: 9090
-      targetPort: 9090
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: myservice-deployment
-  namespace: default
-  labels:
-    app: myservice
-    version: v1
-    service: fake-service
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: myservice
-  template:
-    metadata:
-      namespace: default
-      labels:
-        app: myservice
-        service: fake-service
-    spec:
-      serviceAccountName: myservice
-      containers:
-        - name: myservice
-          image: nicholasjackson/fake-service:v0.25.2
-          ports:
-            - containerPort: 9090
-          env:
-            - name: 'LISTEN_ADDR'
-              value: '0.0.0.0:9090'
-            # - name: 'UPSTREAM_URIS'
-            #   value: 'http://schema-registry.query.consul:8080'
-            - name: 'NAME'
-              value: 'myservice'
-            - name: 'MESSAGE'
-              value: 'API response'
-            - name: 'SERVER_TYPE'
-              value: 'http'
-            - name: 'TIMING_50_PERCENTILE'
-              value: '20ms'
-            - name: 'TIMING_90_PERCENTILE'
-              value: '30ms'
-            - name: 'TIMING_99_PERCENTILE'
-              value: '40ms'
-            - name: 'TIMING_VARIANCE'
-              value: '10'
-            - name: 'HTTP_CLIENT_APPEND_REQUEST'
-              value: 'true'
-            - name: 'LOG_LEVEL'
-              value: 'debug'
-EOF
-#     kubectl apply -f - <<EOF
-# apiVersion: networking.istio.io/v1alpha3
-# kind: Gateway
-# metadata:
-#   name: httpbin-gateway
-# spec:
-#   # The selector matches the ingress gateway pod labels.
-#   # If you installed Istio using Helm following the standard documentation, this would be "istio=ingress"
-#   selector:
-#     istio: ingress
-#   servers:
-#   - port:
-#       number: 80
-#       name: http
-#       protocol: HTTP
-#     hosts:
-#     - "httpbin.example.com"
-# EOF
-
-    kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1alpha3
-kind: VirtualService
-metadata:
-  name: myservice
-spec:
-  hosts:
-  - "httpbin.example.com"
-  gateways:
-  - httpbin-gateway
-  http:
-  - match:
-    - uri:
-        prefix: /web
-    route:
-    - destination:
-        port:
-          number: 9090
-        host: myservice
-EOF
-}
 deploy_httpbin () {
 # deploy httpbin istio sample app
 # curl https://raw.githubusercontent.com/istio/istio/release-1.20/samples/httpbin/httpbin.yaml | kubectl apply -f -
@@ -268,18 +154,13 @@ EOF
 }
 
 delete () {
-    helm delete istio-ingress -n istio-ingress
+    helm delete istio-ingress -n istio-ingress --debug
     kubectl delete namespace istio-ingress
-    helm delete istiod -n istio-system
+    helm delete istiod -n istio-system --debug
     helm delete istio-base -n istio-system
     kubectl delete namespace istio-system
-    #Delete Istio CRDs
-    #kubectl get crd -oname | grep --color=never 'istio.io' | xargs kubectl delete
-    kubectl delete gateways.networking.istio.io httpbin-gateway
-    kubectl delete virtualservices.networking.istio.io httpbin
-
-    # delete httpbin
-    # curl https://raw.githubusercontent.com/istio/istio/release-1.20/samples/httpbin/httpbin.yaml | kubectl delete --ignore-not-found=true -f -
+    # Delete Istio CRDs
+    kubectl get crd -oname | grep --color=never 'istio.io' | xargs kubectl delete
 }
 
 #Cleanup if any param is given on CLI
@@ -290,5 +171,4 @@ else
     echo "Deploying Services"
     install
     #deploy_httpbin
-    #deploy_web
 fi

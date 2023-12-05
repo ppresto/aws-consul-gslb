@@ -30,42 +30,57 @@ locals {
           "cluster_endpoint_public_access" : true,
           "eks_min_size" : 1,
           "eks_max_size" : 3,
+          "eks_desired_size" : 1            # used for pool size and consul replicas size
+          "eks_instance_type" : "m5.large" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
+          #"service_ipv4_cidr" : "10.17.16.0/24" #Can't overlap with VPC CIDR
+          "consul_helm_chart_template" : "values-server-sd-nocatalogsync.yaml"
+          "consul_datacenter" : "west"
+          "consul_type" : "server"
+        }
+        consul2 = {
+          "cluster_name" : "${var.prefix}-usw2-consul2",
+          "cluster_version" : var.eks_cluster_version,
+          "ec2_ssh_key" : var.ec2_key_pair_name,
+          "cluster_endpoint_private_access" : true,
+          "cluster_endpoint_public_access" : true,
+          "eks_min_size" : 1,
+          "eks_max_size" : 3,
+          "eks_desired_size" : 1            # used for pool size and consul replicas size
+          "eks_instance_type" : "m5.large" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
+          #"service_ipv4_cidr" : "10.17.16.0/24" #Can't overlap with VPC CIDR
+          "consul_helm_chart_template" : "values-server-sd-nocatalogsync.yaml"
+          "consul_datacenter" : "central"
+          "consul_type" : "server"
+        }
+        west = {
+          "cluster_name" : "${var.prefix}-usw2-west",
+          "cluster_version" : var.eks_cluster_version,
+          "ec2_ssh_key" : var.ec2_key_pair_name,
+          "cluster_endpoint_private_access" : true,
+          "cluster_endpoint_public_access" : true,
+          "eks_min_size" : 1,
+          "eks_max_size" : 3,
+          "eks_desired_size" : 1           # used for pool size and consul replicas size
+          "eks_instance_type" : "m5.xlarge" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
+          "consul_helm_chart_template" : "values-dataplane-hosted-sd.yaml"
+          "consul_datacenter" : "west"
+          "consul_type" : "client"
+        }
+        central = {
+          "cluster_name" : "${var.prefix}-usw2-central",
+          "cluster_version" : var.eks_cluster_version,
+          "ec2_ssh_key" : var.ec2_key_pair_name,
+          "cluster_endpoint_private_access" : true,
+          "cluster_endpoint_public_access" : true,
+          "eks_min_size" : 1,
+          "eks_max_size" : 3,
           "eks_desired_size" : 1           # used for pool size and consul replicas size
           "eks_instance_type" : "m5.xlarge" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
           #"service_ipv4_cidr" : "10.17.16.0/24" #Can't overlap with VPC CIDR
-          "consul_helm_chart_template" : "values-server-sd.yaml"
-          "consul_datacenter" : "dc1"
-          "consul_type" : "server"
+          "consul_helm_chart_template" : "values-dataplane-hosted-sd.yaml"
+          "consul_datacenter" : "central"
+          "consul_type" : "client"
         }
-        # app1 = {
-        #   "cluster_name" : "${var.prefix}-usw2-app1",
-        #   "cluster_version" : var.eks_cluster_version,
-        #   "ec2_ssh_key" : var.ec2_key_pair_name,
-        #   "cluster_endpoint_private_access" : true,
-        #   "cluster_endpoint_public_access" : true,
-        #   "eks_min_size" : 1,
-        #   "eks_max_size" : 3,
-        #   "eks_desired_size" : 1           # used for pool size and consul replicas size
-        #   "eks_instance_type" : "m5.large" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
-        #   "consul_helm_chart_template" : ""
-        #   "consul_datacenter" : ""
-        #   "consul_type" : ""
-        # }
-        # "consul2" = {
-        #   "cluster_name" : "${var.prefix}-usw2-consul2",
-        #   "cluster_version" : var.eks_cluster_version,
-        #   "ec2_ssh_key" : var.ec2_key_pair_name,
-        #   "cluster_endpoint_private_access" : true,
-        #   "cluster_endpoint_public_access" : true,
-        #   "eks_min_size" : 1,
-        #   "eks_max_size" : 3,
-        #   "eks_desired_size" : 1           # used for pool size and consul replicas size
-        #   "eks_instance_type" : "m5.large" # m5.large(2cpu,8mem), m5.2xlarge(8cpu,32mem)
-        #   #"service_ipv4_cidr" : "10.17.16.0/24" #Can't overlap with VPC CIDR
-        #   "consul_helm_chart_template" : "values-server-sd.yaml"
-        #   "consul_datacenter" : "dc2"
-        #   "consul_type" : "server"
-        # }
       }
       "ec2" = {
         "vm1" = {
@@ -73,11 +88,6 @@ locals {
           "target_subnets" : "private_subnets"
           "associate_public_ip_address" : false
           "service" : "consul-esm"
-        }
-        "vm2" = {
-          "ec2_ssh_key" : var.ec2_key_pair_name
-          "target_subnets" : "private_subnets"
-          "associate_public_ip_address" : false
         }
         "bastion" = {
           "ec2_ssh_key" : var.ec2_key_pair_name
@@ -257,12 +267,16 @@ module "vpc-usw2" {
     "kubernetes.io/role/internal-elb"                                                    = 1
     "kubernetes.io/cluster/${try(local.usw2.vpc1.eks.consul1.cluster_name, var.prefix)}" = "shared"
     "kubernetes.io/cluster/${try(local.usw2.vpc1.eks.consul2.cluster_name, var.prefix)}" = "shared"
+    "kubernetes.io/cluster/${try(local.usw2.vpc1.eks.west.cluster_name, var.prefix)}"    = "shared"
+    "kubernetes.io/cluster/${try(local.usw2.vpc1.eks.central.cluster_name, var.prefix)}" = "shared"
   }
   public_subnet_tags = {
     Tier                                                                                 = "Public"
     "kubernetes.io/role/elb"                                                             = 1
     "kubernetes.io/cluster/${try(local.usw2.vpc1.eks.consul1.cluster_name, var.prefix)}" = "shared"
     "kubernetes.io/cluster/${try(local.usw2.vpc1.eks.consul2.cluster_name, var.prefix)}" = "shared"
+    "kubernetes.io/cluster/${try(local.usw2.vpc1.eks.west.cluster_name, var.prefix)}"    = "shared"
+    "kubernetes.io/cluster/${try(local.usw2.vpc1.eks.central.cluster_name, var.prefix)}" = "shared"
   }
   default_route_table_tags = {
     Name = "${var.prefix}-vpc1-default"

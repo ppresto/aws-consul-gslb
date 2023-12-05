@@ -8,14 +8,14 @@ CONSUL_CA=$(echo ${CONSUL_CA_FILE}| base64 -d)
 ### Install Consul - Ext K8s cluster requires awscli, kubctl, .kube and expose host ports
 curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
 apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-apt update && apt install -y consul-enterprise=1.16.0+ent-1 unzip jq awscli
+apt update && apt install -y consul-enterprise=1.16.3+ent-1 unzip jq awscli
 snap install kubectl --classic
 
 ### Install Envoy
 curl https://func-e.io/install.sh | bash -s -- -b /usr/local/bin/
 func-e versions -all
-func-e use 1.23.3
-cp /root/.func-e/versions/1.23.3/bin/envoy /usr/local/bin
+func-e use 1.26.3
+cp /root/.func-e/versions/1.26.3/bin/envoy /usr/local/bin
 envoy --version
 
 ### Install fake-service

@@ -4,6 +4,6 @@ metadata:
   name: default ## The name of the partition containing the service
 spec:
   services:
-    - name: "schema-registry" ## The name of the service you want to export
+    - name: "httpbin" ## The name of the service you want to export
       consumers:
-      - peer: dc2-default ## The name of the peer that receives the service
+      - peer: central-default ## The name of the peer that receives the service

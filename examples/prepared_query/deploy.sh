@@ -30,13 +30,13 @@ create () {
     --request POST \
     --data @- <<-EOF
 {
-  "Name": "schema-registry",
+  "Name": "httpbin",
   "Service": {
-    "Service": "schema-registry",
+    "Service": "httpbin",
     "Failover": {
 		"Targets": [
-			{"Peer": "dc1-default"},
-			{"Peer": "dc2-default"}
+			{"Peer": "west-default"},
+			{"Peer": "central-default"}
 		]
     }
   }

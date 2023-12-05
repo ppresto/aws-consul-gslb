@@ -3,15 +3,24 @@
 #  PREREQ - install Istio Ingress GW
 #   ../../scripts/install_istio_ingress_gw.sh
 #
+TYPE_CHECK=$(kubectl -n istio-ingress get svc istio-ingress -o json | jq -r '.spec.type')
+if [[ $TYPE_CHECK == "LoadBalancer" ]]; then
+  echo "SUCCESSFUL CHECK... istio-ingress Type = 'LoadBalancer'"
+else
+  echo "ERROR - istio-ingress Type is not LoadBalancer!  Type = $TYPE_CHECK"
+  echo "Reconfigure istio-ingress Type to LoadBalancer"
+  exit
+fi
+
 SCRIPT_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 
 deploy_istioingressgateway () {
   kubectl apply -f ${SCRIPT_DIR}/istio-gateway.yaml
 }
 
-deploy_web () {
-    kubectl apply -f ${SCRIPT_DIR}/web.yaml
-    kubectl apply -f ${SCRIPT_DIR}/web-virtualservice.yaml
+deploy_myservice () {
+    kubectl apply -f ${SCRIPT_DIR}/myservice.yaml
+    kubectl apply -f ${SCRIPT_DIR}/myservice-virtualservice.yaml
 }
 
 deploy_httpbin () {
@@ -36,15 +45,20 @@ get_aws_ingress () {
   export SECURE_INGRESS_PORT=$(kubectl -n "$INGRESS_NS" get service "$INGRESS_NAME" -o jsonpath='{.spec.ports[?(@.name=="https")].port}')
   export TCP_INGRESS_PORT=$(kubectl -n "$INGRESS_NS" get service "$INGRESS_NAME" -o jsonpath='{.spec.ports[?(@.name=="tcp")].port}')
 
-  echo "INGRESS_HOST=$INGRESS_HOST, INGRESS_PORT=$INGRESS_PORT"
+  echo "Calling httpbin - curl -s -I -HHost:httpbin.example.com http://$INGRESS_HOST:$INGRESS_PORT/status/200"
+  curl -s -I -HHost:httpbin.example.com "http://$INGRESS_HOST:$INGRESS_PORT/status/200"
+  echo
+  echo "Calling myservice - curl -s -I -HHost:httpbin.example.com http://$INGRESS_HOST:$INGRESS_PORT/myservice"
+  curl -s -I -HHost:httpbin.example.com "http://$INGRESS_HOST:$INGRESS_PORT/myservice"
+  echo
   # kubectl get gateways --all-namespaces
   # kubectl get ingress --all-namespaces
 }
 
 delete () {
   kubectl delete -f ${SCRIPT_DIR}/istio-gateway.yaml
-  kubectl delete -f ${SCRIPT_DIR}/web.yaml
-  kubectl delete -f ${SCRIPT_DIR}/web-virtualservice.yaml
+  kubectl delete -f ${SCRIPT_DIR}/myservice.yaml
+  kubectl delete -f ${SCRIPT_DIR}/myservice-virtualservice.yaml
    # curl https://raw.githubusercontent.com/istio/istio/release-1.20/samples/httpbin/httpbin.yaml | kubectl delete --ignore-not-found=true -f -
   kubectl delete -f ${SCRIPT_DIR}/httpbin.yaml
   kubectl delete -f ${SCRIPT_DIR}/httpbin-virtualservice.yaml
@@ -57,7 +71,7 @@ if [[ ! -z $1 ]]; then
 else
     echo "Deploying Services"
     deploy_istioingressgateway
-    deploy_web
+    deploy_myservice
     deploy_httpbin
     get_aws_ingress
 fi

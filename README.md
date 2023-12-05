@@ -4,7 +4,7 @@
 
 
 - [Use Consul to provide Global Service Load Balancing with a minimal footprint](#use-consul-to-provide-global-service-load-balancing-with-a-minimal-footprint)
-- [consul-aws-esm](#consul-aws-esm)
+- [aws-consul-gslbonly](#aws-consul-gslbonly)
   - [Getting Started](#getting-started)
     - [Pre Reqs](#pre-reqs)
   - [Provision Infrastructure](#provision-infrastructure)
@@ -32,11 +32,11 @@
         - [Deregister fake-service (web)](#deregister-fake-service-web)
     - [Deploy ESM on VM with Consul agent](#deploy-esm-on-vm-with-consul-agent)
     - [EKS -  Consul Helm Values](#eks----consul-helm-values)
-# consul-aws-esm
-This repo builds the required AWS Networking and EKS resources to run consul-esm on EKS and test Prepared queries.
+# aws-consul-gslbonly
+This repo builds the required AWS Networking and EKS resources
 
 ## Getting Started
-Review the different architecture models within ./quickstart.  There are more details on these at the bottom of this README.  
+
 ### Pre Reqs
 - Consul Enterprise License `./files/consul.lic`
 - Setup shell with AWS credentials 
@@ -58,18 +58,23 @@ Connect to EKS using `scripts/kubectl_connect_eks.sh`.  Pass this script the pat
 ```
 source ../../scripts/kubectl_connect_eks.sh .
 ```
-This script connects EKS and builds some useful aliases shown in the output.
-* `consul1` alias for consul1 EKS cluster context
-* `consul2` alias for consul2 EKS cluster context
-* `kk` alias : kubectl -n kube-system
-* `kc` alias : kubectl -n consul
-* `k` alias  : kubectl
 
 Install the AWS Load Balancer Controller addon to EKS from the terraform directory.
 ```
 ../../scripts/install_awslb_controller.sh .
 ```
 This is used to create an NLB for Consul mesh gateways to enable Peering, and an external NLB for the Consul UI.
+
+Install Istio Ingress GW to use Nodeport.  Verify `./examples/istio-ingress-gw/helm/values.yaml`
+```
+../../scripts/install_istio_ingress_gw.sh
+```
+
+Deploy services | virtual services | aws ingress to route to Istio GW Nodeport
+``` 
+../../examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress.sh
+```
+Verify Services and routes are working
 
 
 ## Install Consul

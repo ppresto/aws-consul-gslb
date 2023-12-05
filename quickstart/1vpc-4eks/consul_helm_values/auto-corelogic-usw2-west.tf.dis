@@ -1,0 +1,26 @@
+module "consul_corelogic-usw2-west" {
+  source   = "../../../modules/helm_install_consul"
+  providers = { aws = aws.usw2 }
+  helm_release_enabled        = true
+  release_name  = "consul-vpc1-west"
+  chart_name         = "consul"
+  cluster_name         = "corelogic-usw2-west"
+  datacenter           = "west"
+  consul_partition     = "default"
+  consul_type          = "client"
+  server_replicas      = "1"
+  consul_version       = "1.16.3-ent"
+  consul_license       = file("../../../files/consul.lic")
+  consul_helm_chart_template = "values-dataplane-hosted-sd.yaml"
+  #consul_helm_chart_template  = "values-dataplane-hcp.yaml"
+  #consul_helm_chart_template = "values-server.yaml"
+  #consul_helm_chart_template = "values-dataplane.yaml"
+  consul_helm_chart_version  = "1.2.3"
+  consul_external_servers    = "NO_HCP_SERVERS" #HCP private endpoint address
+  eks_cluster_endpoint       = "https://3897319922875C6BF67565FEAB6C0E35.gr7.us-west-2.eks.amazonaws.com"
+  hcp_consul_ca_file             = ""
+  hcp_consul_config_file             = ""
+  hcp_consul_root_token_secret_id = ""
+  node_selector = ""
+}
+

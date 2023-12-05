@@ -122,8 +122,8 @@ module "vpc_cni_irsa" {
   }
 
   tags = {
-    Owner    = "presto"
-    Org      = "SE"
+    Owner = "presto"
+    Org   = "SE"
   }
 }
 

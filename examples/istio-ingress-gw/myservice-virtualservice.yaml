@@ -4,13 +4,13 @@ metadata:
   name: myservice
 spec:
   hosts:
-  - "httpbin.example.com"
+  - "*"
   gateways:
   - httpbin-gateway
   http:
   - match:
     - uri:
-        prefix: /web
+        prefix: /
     route:
     - destination:
         port:

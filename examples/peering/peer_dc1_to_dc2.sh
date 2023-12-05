@@ -18,54 +18,54 @@ function setup () {
   # kubectl -n consul exec -it consul-server-0 -- consul config read -kind proxy-defaults -name global
   
   # Create Peering Acceptor
-  echo "kubectl apply -f ${CUR_SCRIPT_DIR}/peering-acceptor-dc1.yaml"
-  kubectl apply -f ${CUR_SCRIPT_DIR}/peering-acceptor-dc1.yaml
+  echo "kubectl apply -f ${CUR_SCRIPT_DIR}/peering-acceptor-west.yaml"
+  kubectl apply -f ${CUR_SCRIPT_DIR}/peering-acceptor-west.yaml
 
   # Verify Peering Acceptor and Secret was created
   kubectl -n consul get peeringacceptors
-  kubectl -n consul get secret peering-token-dc2-default --template "{{.data.data | base64decode | base64decode }}" | jq
+  kubectl -n consul get secret peering-token-central-default --template "{{.data.data | base64decode | base64decode }}" | jq
 
   #
   ### West DC: presto-cluster-usw2
   #
 
   # Copy secrets from peering acceptor (East) to peering dialer (West)
-  kubectl -n consul get secret peering-token-dc2-default --context ${CTX1} -o yaml | kubectl apply --context ${CTX2} -f -
+  kubectl -n consul get secret peering-token-central-default --context ${CTX1} -o yaml | kubectl apply --context ${CTX2} -f -
 
   # Create Peering Dialer
-  kubectl apply --context ${CTX2} -f ${CUR_SCRIPT_DIR}/peering-dialer-dc2.yaml
+  kubectl apply --context ${CTX2} -f ${CUR_SCRIPT_DIR}/peering-dialer-central.yaml
 
   # Verify peering from the Acceptor
   #kubectl config use-context ${CTX1}
   echo
-  echo "Verifying Peering Connection on Acceptor (DC1) with curl command:"
+  echo "Verifying Peering Connection on Acceptor (west) with curl command:"
   sleep 5
   # GET CONSUL ENV Values (CONSUL_HTTP_TOKEN, CONSUL_HTTP_ADDR)
   source ${CUR_SCRIPT_DIR}/../../scripts/setConsulEnv.sh
   #source ${CUR_SCRIPT_DIR}/../../../scripts/setHCP-ConsulEnv-use1.sh ${CUR_SCRIPT_DIR}/../../../quickstart/2hcp-2eks-2ec2/
   curl -sk --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" \
-    --request GET ${CONSUL_HTTP_ADDR}/v1/peering/dc2-default \
+    --request GET ${CONSUL_HTTP_ADDR}/v1/peering/central-default \
     | jq -r
 
-  echo "curl -sk --header \"X-Consul-Token: ${CONSUL_HTTP_TOKEN}\" --request GET ${CONSUL_HTTP_ADDR}/v1/peering/dc2-default | jq -r"
+  echo "curl -sk --header \"X-Consul-Token: ${CONSUL_HTTP_TOKEN}\" --request GET ${CONSUL_HTTP_ADDR}/v1/peering/central-default | jq -r"
 
   # Export Services for each peer to advertise available service catalog.
   echo "Exporting Acceptor services..."
-  kubectl apply --context ${CTX1} -f ${CUR_SCRIPT_DIR}/exportedServices_dc1-default.yaml
+  kubectl apply --context ${CTX1} -f ${CUR_SCRIPT_DIR}/exportedServices_west-default.yaml
   echo "Exporting Dialer services..."
-  kubectl apply --context ${CTX2}  -f ${CUR_SCRIPT_DIR}/exportedServices_dc2-default.yaml
+  kubectl apply --context ${CTX2}  -f ${CUR_SCRIPT_DIR}/exportedServices_central-default.yaml
 }
 
 # Clean up
 function remove () {
     kubectl config use-context ${CTX2}
-    kubectl delete -f ${CUR_SCRIPT_DIR}/exportedServices_dc2-default.yaml
-    kubectl delete -f ${CUR_SCRIPT_DIR}/peering-dialer-dc2.yaml
-    kubectl -n consul delete secret peering-token-dc2-default
+    kubectl delete -f ${CUR_SCRIPT_DIR}/exportedServices_central-default.yaml
+    kubectl delete -f ${CUR_SCRIPT_DIR}/peering-dialer-central.yaml
+    kubectl -n consul delete secret peering-token-central-default
 
     kubectl config use-context ${CTX1}
-    kubectl delete -f ${CUR_SCRIPT_DIR}/exportedServices_dc1-default.yaml
-    kubectl delete -f ${CUR_SCRIPT_DIR}/peering-acceptor-dc1.yaml
+    kubectl delete -f ${CUR_SCRIPT_DIR}/exportedServices_west-default.yaml
+    kubectl delete -f ${CUR_SCRIPT_DIR}/peering-acceptor-west.yaml
 
     kubectl -n consul --context ${CTX1} delete -f ${CUR_SCRIPT_DIR}/mesh.yaml
     kubectl -n consul --context ${CTX2} delete -f ${CUR_SCRIPT_DIR}/mesh.yaml
