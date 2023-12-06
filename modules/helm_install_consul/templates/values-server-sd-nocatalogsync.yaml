@@ -29,7 +29,7 @@ global:
     enableAgentMetrics: true
     agentMetricsRetentionTime: "59m"
 client:
-  enabled: false
+  enabled: true
 #   exposeGossipPorts: true # exposes client gossip ports as hostPorts
 
 server:

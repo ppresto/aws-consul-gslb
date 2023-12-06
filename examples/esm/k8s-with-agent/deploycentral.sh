@@ -1,6 +1,8 @@
 #!/bin/bash
 SCRIPT_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 
+CTX1=consul1
+CTX2=central
 echo "Using Context: $(kubectl config current-context)"
 echo
 
@@ -14,9 +16,14 @@ echo "Setting CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR}"
 ESM_DATA=$(curl ${CONSUL_HTTP_ADDR}/v1/catalog/service/consul-esm)
 DATACENTER=$(curl --silent ${CONSUL_HTTP_ADDR}/v1/catalog/datacenters | jq -r '.[]')
 
-deploy () {
-	echo "Deploy myservice-${DATACENTER}"
-	sed "s/myservice/myservice-${DATACENTER}/g" ${SCRIPT_DIR}/myservice.yaml | kubectl apply -f -
+# Get ALB Node Info
+AWS_ALB="$(kubectl -n istio-ingress get ingress --context ${CTX2} -o json | jq -r '.items[].status.loadBalancer.ingress[].hostname')"
+AWS_ALB_IP=$(dig +short ${AWS_ALB} | head -1)
+AWS_ALB_NAME="AWS_ALB_${DATACENTER}"
+
+deploy_esm () {
+	# echo "Deploy myservice-${DATACENTER}"
+	# sed "s/myservice/myservice-${DATACENTER}/g" ${SCRIPT_DIR}/myservice.yaml | kubectl apply -f -
 	echo "Check if consul-esm service returns metadata..."
 	curl --silent ${CONSUL_HTTP_ADDR}/v1/catalog/service/consul-esm | jq -r
 	echo
@@ -30,17 +37,153 @@ deploy () {
 	# echo "Deploying learn-ext.json - http-check"
 	# echo "curl --silent --header \"X-Consul-Token: ${CONSUL_HTTP_TOKEN}\" --request PUT --data @${SCRIPT_DIR}/learn-ext.json ${CONSUL_HTTP_ADDR}/v1/catalog/register"
 	# curl --silent --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" --request PUT --data @${SCRIPT_DIR}/learn-ext.json ${CONSUL_HTTP_ADDR}/v1/catalog/register
-
-	echo
-	echo "Deploying ${FILE} - health checks"
-	echo "curl --silent --header \"X-Consul-Token: ${CONSUL_HTTP_TOKEN}\" --request PUT --data @${SCRIPT_DIR}/${FILE} ${CONSUL_HTTP_ADDR}/v1/catalog/register"
-	curl --silent --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" --request PUT --data @${SCRIPT_DIR}/${FILE} ${CONSUL_HTTP_ADDR}/v1/catalog/register
-	sleep 2
-	echo
-	echo "myservice-${DATACENTER} URL (wait a couple minutes for DNS resolution)"
-	echo "http://$(kubectl get svc myservice-${DATACENTER} -o json | jq -r '.status.loadBalancer.ingress[].hostname'):9090/ui"
 }
 
+register_node() {
+	NODE=$(cat <<- EOF
+{
+    "Datacenter": "${DATACENTER}",
+    "Node": "${AWS_ALB_NAME}",
+    "Address": "${AWS_ALB}",
+    "TaggedAddresses": {
+      "lan": "${AWS_ALB_IP}",
+      "wan": "${AWS_ALB_IP}"
+    },
+    "NodeMeta": {
+      "external-node": "true",
+      "external-probe": "true"
+    },
+    "Check": {
+        "Node": "${AWS_ALB_NAME}",
+        "CheckID": "node:health",
+        "Name": "node health check",
+        "Notes": "TCP health check",
+        "Definition": {
+        "TCP": "${AWS_ALB}:80",
+        "Interval": "5s",
+        "Timeout": "1s",
+        "DeregisterCriticalServiceAfter": "30s"
+        },
+        "Namespace": "default"
+    },
+    "SkipNodeUpdate": false
+  },
+EOF
+)
+	curl \
+		--request PUT \
+		--data "${NODE}" \
+		--header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" \
+		--header "X-Consul-Namespace: default"  \
+		http://${CONSUL_HTTP_ADDR}/v1/catalog/register
+}
+
+deregister_node () {
+	NODE=$(cat <<- EOF
+{
+  "Datacenter": "${DATACENTER}",
+  "Node": "${AWS_ALB_NAME}"
+}
+EOF
+)
+
+	curl \
+		--request PUT \
+		--data "${NODE}" \
+		--header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" \
+		http://${CONSUL_HTTP_ADDR}/v1/catalog/deregister
+}
+
+register_svc () {
+	SVC=$(cat <<- EOF
+{
+    "Node": "${AWS_ALB_NAME}",
+    "Address": "${AWS_ALB}",
+    "NodeMeta": {
+      "external-node": "true",
+      "external-probe": "true"
+    },
+    "Service": {
+      "ID": "httpbin-${CTX2}",
+      "Service": "httpbin",
+      "Port": 80
+    },
+    "Checks": [
+      {
+        "Name": "http-httpbin",
+        "status": "critical",
+		    "serviceID": "httpbin-${CTX2}",
+		    "interval": "1s",
+		    "timeout": "5s",
+        "Definition": {
+          "http": "http://${AWS_ALB}/status/200",
+		      "header": { "Host": ["httpbin.example.com"] },
+          "interval": "1s",
+          "timeout": "5s",
+        }
+      }
+    ],
+	"SkipNodeUpdate": true
+  }
+EOF
+	)
+
+	echo
+	echo "Deploying SVC"
+	echo "curl --silent --header \"X-Consul-Token: ${CONSUL_HTTP_TOKEN}\" --request PUT --data \"${SVC}\" ${CONSUL_HTTP_ADDR}/v1/catalog/register"
+	curl --silent --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" --request PUT --data "${SVC}" ${CONSUL_HTTP_ADDR}/v1/catalog/register
+	sleep 2
+	echo "curl -s -I -HHost:httpbin.example.com http://${AWS_ALB}/status/200"
+	curl -s -I -HHost:httpbin.example.com http://${AWS_ALB}/status/200
+}
+
+register_svc2 () {
+	SVC=$(cat <<- EOF
+{
+    "Node": "${AWS_ALB_NAME}",
+    "Address": "${AWS_ALB}",
+    "NodeMeta": {
+      "external-node": "true",
+      "external-probe": "true"
+    },
+    "Service": {
+      "ID": "myservice-${CTX2}",
+      "Service": "myservice",
+      "Port": 80
+    },
+    "Checks": [
+      {
+        "Name": "http-myservice",
+        "status": "passing",
+        "Definition": {
+          "http": "http://${AWS_ALB}/myservice",
+		      "header": { "Host": ["myservice.example.com"] },
+          "interval": "1s",
+          "timeout": "5s",
+        }
+      }
+    ],
+	"SkipNodeUpdate": true
+  }
+EOF
+	)
+
+	echo
+	echo "Deploying SVC"
+	echo "curl --silent --header \"X-Consul-Token: ${CONSUL_HTTP_TOKEN}\" --request PUT --data \"${SVC}\" ${CONSUL_HTTP_ADDR}/v1/catalog/register"
+	curl --silent --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" --request PUT --data "${SVC}" ${CONSUL_HTTP_ADDR}/v1/catalog/register
+	sleep 2
+	echo "curl -s -I -HHost:myservice.example.com http://${AWS_ALB}/myservice"
+	curl -s -I -HHost:myservice.example.com http://${AWS_ALB}/myservice
+}
+
+deregister_svc () {
+	SVC_JSON=$(cat <<- EOF
+{"Node": ${AWS_ALB_NAME},"Address": ${AWS_ALB}}
+EOF
+)
+	curl --silent --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" --request PUT --data "${SVC_JSON}" ${CONSUL_HTTP_ADDR}/v1/catalog/deregister
+}
 node_data() {
   Node=$(cat ${SCRIPT_DIR}/${FILE} | jq -r '.Node')
   Address=$(cat ${SCRIPT_DIR}/${FILE} | jq -r '.Address')
@@ -112,7 +255,7 @@ usage() {
     exit 1; 
 }
 
-while getopts "df:" o; do
+while getopts "diruf:" o; do
     case "${o}" in
         f)
             FILE="${OPTARG}"
@@ -124,8 +267,25 @@ while getopts "df:" o; do
             fi
             ;;
 		d)
-            DELETE=true
+			if [[ -z $FILE ]]; then
+				FILE="learn-ext.json"
+			fi
+            deregister_node
+			deregister_svc
+			delete
             ;;
+		i)
+			deploy_esm
+			;;
+		r)
+			register_node
+			register_svc
+			register_svc2
+			;;
+		u)
+			deregister_node
+			deregister_svc
+			;;
         *)
             usage
             ;;
@@ -135,17 +295,4 @@ shift $((OPTIND-1))
 
 if [[ -z $FILE ]]; then
 	FILE="learn-ext.json"
-fi
-
-if [[ $DELETE == true && -z $FILE ]]; then
-	echo "Missing a service registration file.  [ -f <ext-svc-registration.json> ]"
-	echo "Defaulting to [ -f learn-ext.json ]"
-	FILE="learn-ext.json"
-fi
-
-#Cleanup if any param is given on CLI
-if [[ $DELETE == true ]]; then
-	delete
-else
-    deploy
 fi

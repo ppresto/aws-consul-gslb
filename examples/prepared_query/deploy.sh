@@ -1,6 +1,9 @@
 #!/bin/bash
 SCRIPT_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 
+unset CONSUL_HTTP_TOKEN
+unset CONSUL_HTTP_ADDR
+
 echo "Using Context: $(kubectl config current-context)"
 echo
 echo

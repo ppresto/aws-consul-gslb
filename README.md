@@ -10,13 +10,9 @@
   - [Provision Infrastructure](#provision-infrastructure)
   - [Install Consul](#install-consul)
     - [Upgrade consul to run agents](#upgrade-consul-to-run-agents)
-  - [Deploy ESM on K8s with an agent](#deploy-esm-on-k8s-with-an-agent)
     - [Review Consul UI's](#review-consul-uis)
+  - [Deploy ESM on K8s with an agent](#deploy-esm-on-k8s-with-an-agent)
     - [Configure Consul DNS on EKS](#configure-consul-dns-on-eks)
-  - [Deploy fake-service and validate Geo-Failover across DCs with prepared queries.](#deploy-fake-service-and-validate-geo-failover-across-dcs-with-prepared-queries)
-    - [Install fake service (schema-registry) on one VM in each datacenter (2 VMs).](#install-fake-service-schema-registry-on-one-vm-in-each-datacenter-2-vms)
-    - [Configure the fake-service (schema-registry) for each DC.](#configure-the-fake-service-schema-registry-for-each-dc)
-    - [Register the the fake-service (schema-registry) in each DC.](#register-the-the-fake-service-schema-registry-in-each-dc)
   - [Setup Peering between both Datacenters for Failover](#setup-peering-between-both-datacenters-for-failover)
   - [Create Prepared Query](#create-prepared-query)
   - [Validate Failover](#validate-failover)
@@ -47,14 +43,14 @@ This repo builds the required AWS Networking and EKS resources
 - helm
 
 ## Provision Infrastructure
-Edit the `quickstart/1vpc-2eks/my.auto.tfvars` and replace the `ec2_key_pair_name` value with your AWS key pair name.  Then use Terraform to build the required AWS Infrastructure.
+Edit the `quickstart/4vpc-2eks/my.auto.tfvars` and replace the `ec2_key_pair_name` value with your AWS key pair name.  Then use Terraform to build the required AWS Infrastructure.
 ```
-cd quickstart/1vpc-2eks
+cd quickstart/4vpc-2eks
 terraform init
 terraform apply -auto-approve
 ```
 
-Connect to EKS using `scripts/kubectl_connect_eks.sh`.  Pass this script the path to the terraform state file used to provision the EKS cluster.  If cwd is ./1vpc-2eks like above then this command would look like the following:
+Connect to EKS using `scripts/kubectl_connect_eks.sh`.  Pass this script the path to the terraform state file used to provision the EKS cluster.  If cwd is ./1vpc-4eks like above then this command would look like the following:
 ```
 source ../../scripts/kubectl_connect_eks.sh .
 ```
@@ -67,15 +63,26 @@ This is used to create an NLB for Consul mesh gateways to enable Peering, and an
 
 Install Istio Ingress GW to use Nodeport.  Verify `./examples/istio-ingress-gw/helm/values.yaml`
 ```
+# change ctx to application k8s cluster
+kubectl config set-context west
+../../scripts/install_istio_ingress_gw.sh
+```
+Repeat for all application k8s clusters
+```
+kubectl config set-context central
 ../../scripts/install_istio_ingress_gw.sh
 ```
 
 Deploy services | virtual services | aws ingress to route to Istio GW Nodeport
-``` 
+```
+kubectl config set-context west
 ../../examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress.sh
 ```
-Verify Services and routes are working
-
+Verify Services and routes are working. Repeat for all app k8s clusters
+```
+kubectl config set-context central
+../../examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress.sh
+```
 
 ## Install Consul
 ```
@@ -95,19 +102,6 @@ helm upgrade ${RELEASE} hashicorp/consul --namespace consul --values ./yaml/auto
 ```
 If you're building Consul outside of this repo ensure the helm values are set properly.
 
-## Deploy ESM on K8s with an agent
-Connect to the EKS cluster hosting Consul and set your current K8s context to the first EKS cluster `consul1`.
-The script below will register the default external learn svc if no arguments are given.  To test failover on specific ext services across DCs skip this step and there will be an option later to register an external service on VM (fake-service).
-```
-unset CONSUL_HTTP_TOKEN
-unset CONSUL_HTTP_ADDR
-cd ../
-consul1
-../../esm/k8s-with-agent/deploy.sh
-consul2
-../../esm/k8s-with-agent/deploy.sh
-```
-
 ### Review Consul UI's
 Login to the consul UI to see the new ext svc and consul-esm svc registered. Get the Consul URL and token for the current k8s context using the following script.  Review both Consul clusters.
 ```
@@ -117,119 +111,40 @@ consul2
 ../../scripts/setConsulEnv.sh
 ```
 
-Click on the ext learn svc. It should be passing its health checks.
-The http-check should be returning 200 OK.
+## Deploy ESM on K8s with an agent
+Connect to the EKS cluster hosting Consul and set your current K8s context to the first EKS cluster `consul1`.
+The script below will register the default external learn svc if no arguments are given.  To test failover on specific ext services across DCs skip this step and there will be an option later to register an external service on VM (fake-service).
+```
+# swtich ctx to consul k8s cluster
+kubectl config set-context consul1
+../../esm/k8s-with-agent/deploy2.sh -i
+# Register previously deployed aws ALB and services to consul
+../../esm/k8s-with-agent/deploy2.sh -r
+```
 
+Repeat for all consul clusters
+```
+kubectl config set-context consul2
+../../esm/k8s-with-agent/deploy2.sh -i
+# Register previously deployed aws ALB and services to consul
+../../esm/k8s-with-agent/deploy2.sh -r
+```
 If there are additional EKS Consul datacenters, switch contexts to the target DC and repeat these steps.
 
 ### Configure Consul DNS on EKS
 Patch core-dns configmap to forward all .consul requests to Consul DNS.
 ```
-consul1
-../../scripts/patch_coredns_to_fwd_to_consul.sh
-consul2
+kubectl config set-context west
 ../../scripts/patch_coredns_to_fwd_to_consul.sh
 ```
 
 Verify coredns is now forwarding .consul requests to Consul
 ```
-consul1
 kc exec statefulset/consul-server -- nslookup consul.service.consul
-kc exec statefulset/consul-server -- nslookup learn.service.consul
-consul2
-kc exec statefulset/consul-server -- nslookup schema-registry.service.consul
 ```
-## Deploy fake-service and validate Geo-Failover across DCs with prepared queries.
-If there are two datacenters do these steps in each one. This repo requires the use of a bastion host to SSH to the internal VMs.  The infra built from this repo will work with the below shortcuts.
-```
-cd ../../quickstart/1vpc-2eks
-vm1=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-vm1"')
-vm2=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-vm2"')
-bastion=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-bastion"')
-```
+Repeat on all k8s clusters that need consul DNS resolution
 
-SSH to the vm in the first DC.  Use your private key so it can be forwarded to the target host.
-```
-ssh-add -L ${HOME}/.ssh/ppresto-ptfe-dev-key.pem
-ssh -A -J ubuntu@${bastion} ubuntu@${vm1}
-```
 
-### Install fake service (schema-registry) on one VM in each datacenter (2 VMs).
-You should be ssh'd into vm1. vm1 will be part of Consul dc1, and vm2 will be part of Consul dc2.  
-Note: When running the below commands you can update the service Name to reflect the DC if graphically doing the failover.  For example,
-```
-export NAME="schema-registry-dc1"
-```
-
-Install fake service by copying and pasting the following in the VM terminal.
-```
-mkdir -p ${HOME}/fake-service/{central_config,bin,logs}
-cd ${HOME}/fake-service/bin
-wget https://github.com/nicholasjackson/fake-service/releases/download/v0.23.1/fake_service_linux_amd64.zip
-unzip fake_service_linux_amd64.zip
-chmod 755 ${HOME}/fake-service/bin/fake-service
-
-cat >${HOME}/fake-service/start.sh <<-EOF
-#!/bin/bash
-
-export MESSAGE="Web RESPONSE"
-export NAME="$NAME"
-export SERVER_TYPE="http"
-export LISTEN_ADDR="0.0.0.0:8080"
-nohup ./bin/fake-service > logs/fake-service.out 2>&1 &
-EOF
-
-chmod 755 ${HOME}/fake-service/start.sh
-cd ${HOME}/fake-service
-./start.sh
-exit
-```
-
-SSH to the new host and update the service name with dc2.
-```
-ssh -A -J ubuntu@${bastion} ubuntu@${vm2}
-export NAME="schema-registry-dc2"
-```
-Now Copy/Paste the steps above to installl fake-service to vm2.
-
-### Configure the fake-service (schema-registry) for each DC.
-Query the environment to collect the VM Node(hostname), and IP Address.  These files will be registered by the correct Consul DC in the next step.
-
-Run the following commands to get dc1 vm1 environment values.
-```
-output=$(terraform output -json)
-NODE=$(echo $output | jq -r '.usw2_ec2_dns.value."vpc1-vm1"')
-ADDRESS=$(echo $output | jq -r '.usw2_ec2_ip.value."vpc1-vm1"')
-ID="schema-registry-dc1"
-echo -e " NODE: $NODE \n ADDRESS: $ADDRESS\n ID: $ID"
-```
-Edit `./esm/k8s-with-agent/svc-ext-dc1.json` with the these values and replace both attributes below with $ADDRESS.
-* Address
-* http-check url address 
-
-Run the following commands to get dc1 vm2 environment values.
-```
-output=$(terraform output -json)
-NODE=$(echo $output | jq -r '.usw2_ec2_dns.value."vpc1-vm2"')
-ADDRESS=$(echo $output | jq -r '.usw2_ec2_ip.value."vpc1-vm2"')
-ID="schema-registry-dc2"
-echo -e " NODE: $NODE \n ADDRESS: $ADDRESS\n ID: $ID"
-```
-Edit `./esm/k8s-with-agent/svc-ext-dc2.json` with the these values.
-* `Node`
-* `Address`
-* Update http-check url with `Address` 
-
-### Register the the fake-service (schema-registry) in each DC.
-Rerun `./esm/k8s-with-agent/deploy.sh` with the new service registration files.  This script will run against the current k8s context.
-```
-consul1
-../../esm/k8s-with-agent/deploy.sh -f ../../esm/k8s-with-agent/svc-ext-dc1.json
-
-consul2
-../../esm/k8s-with-agent/deploy.sh -f ../../esm/k8s-with-agent/svc-ext-dc2.json
-```
-Review the Consul UI's to see the new service registered and being healthchecked by ESM.
 ## Setup Peering between both Datacenters for Failover
 Peer the two Consul DC's so services can discover and failover across data centers.
 
@@ -254,9 +169,12 @@ Note:  To peer directly from Consul servers instead of the more secure design us
 ##  Create Prepared Query
 Go to each EKS context and create a prepared query that will failover the service (ex: `schema-registry`) across peers.  The following script will use the current-contex, create a prepared query for that DC, and list the defined queries to verify it was created.
 ```
-consul1
+kubectl config set-context consul1
 ../../esm/prepared_query/deploy.sh
-consul2
+```
+Repeat for each consul cluster that needs failover
+```
+kubectl config set-context consul2
 ../../esm/prepared_query/deploy.sh
 ```
 

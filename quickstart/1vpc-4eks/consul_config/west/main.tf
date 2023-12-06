@@ -17,7 +17,7 @@ resource "consul_service" "httpbin" {
     check_id                          = "service:httpbin"
     name                              = "httpbin health check"
     # status                            = "critical"
-    http                              = "http://${consul_node.alb.name}/status/200"
+    http                              = "http://${consul_node.alb.name}:80/status/200"
     tls_skip_verify                   = true
     method                            = "GET"
     interval                          = "5s"
@@ -38,7 +38,7 @@ resource "consul_service" "myservice" {
     check_id                          = "service:myservice"
     name                              = "myservice health check"
     # status                            = "critical"
-    http                              = "http://${consul_node.alb.name}/myservice"
+    http                              = "http://${consul_node.alb.name}:80/myservice"
     # tls_skip_verify                   = false
     method                            = "GET"
     interval                          = "5s"
