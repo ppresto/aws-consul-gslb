@@ -18,6 +18,13 @@
   - [Validate Failover](#validate-failover)
   - [Clean Up](#clean-up)
   - [Quick Start - Demo Steps](#quick-start---demo-steps)
+    - [Review Environment](#review-environment)
+    - [Deploy and register services (West) to ESM](#deploy-and-register-services-west-to-esm)
+    - [Peer West to Central](#peer-west-to-central)
+    - [Use SSH Session to validate DNS](#use-ssh-session-to-validate-dns)
+      - [DNS and httpbin validation](#dns-and-httpbin-validation)
+    - [Kill httpbin service (West) to show failover](#kill-httpbin-service-west-to-show-failover)
+      - [Failover validation](#failover-validation)
   - [Appendix](#appendix)
     - [Deploy ESM on Kubernetes with no Consul agents](#deploy-esm-on-kubernetes-with-no-consul-agents)
       - [K8s deployment](#k8s-deployment)
@@ -232,34 +239,62 @@ terraform destroy -auto-approve
 ```
 
 ## Quick Start - Demo Steps
-If already deployed and cleaned up using the steps above, the `myservice` k8s LB service should be externally available on 9090.  This will speed up demo by 3-5m.
-Now execute the following tasks for each datacenter:
-* Deploy ESM and register the external service
-* Create the prepared query for DNS failover
-* Validate DNS from K8s `myservice` pod.
+PreReq:
+* Keep all services (Central) registered to ESM
+* Keep all prepared Queries
+* Remove Peering connection
+  ```
+  ../examples/peering/peer_dc1_to_dc2.sh -d
+  ```
+* Remove services (West) from ESM
+  ```
+  ./scripts/demo_gslb.sh -c west -u
+  ```
+* SSH to VM and verify Consul DNS for demo
 
+### Review Environment
+* ./examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress.sh
+* istio-gateway.yaml
+* httpbin-virtualservice.yaml
+* myservice-virtualservice.yaml
+### Deploy and register services (West) to ESM
 ```
-consul1
-../../esm/k8s-with-agent/deploy.sh -f ../../esm/k8s-with-agent/svc-ext-dc1.json
-../../esm/prepared_query/deploy.sh
-
-consul2
-../../esm/k8s-with-agent/deploy.sh -f ../../esm/k8s-with-agent/svc-ext-dc2.json
-../../esm/prepared_query/deploy.sh
-
-../../esm/peering/peer_dc1_to_dc2.sh
+./scripts/demo_gslb.sh -c west -d
 ```
-Finaly, Peer the datacenters to enable failover
 
-Validate failover
+### Peer West to Central
+Review Peering UI before running script to create
 ```
-ssh-add -L ${HOME}/.ssh/ppresto-ptfe-dev-key.pem
-vm1=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-vm1"')
-vm2=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-vm2"')
-bastion=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-bastion"')
+../examples/peering/peer_dc1_to_dc2.sh
+```
 
-ssh -A -J ubuntu@${bastion} ubuntu@${vm1}
-pkill fake-service
+### Use SSH Session to validate DNS
+```
+BASTION=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-bastion"')
+IVM=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-vm1"')
+ssh-add /Users/patrickpresto/.ssh/ppresto-ptfe-dev-key.pem
+ssh -A -J ubuntu@${BASTION} ubuntu@${IVM}
+```
+#### DNS and httpbin validation
+```
+curl http://httpbin.query.consul/status/200
+curl -I -HHost:httpbin.example.com http://httpbin.query.consul/status/200
+
+dig +short httpbin.query.consul
+# Review AWS ILB Node and lookup directly to verify IPs
+```
+### Kill httpbin service (West) to show failover
+```
+../../scripts/demo_gslb.sh -c west -k
+```
+Verify services are down in the UI
+
+#### Failover validation
+```
+dig +short httpbin.query.consul
+# Review AWS ILB Node and see the new IPs are using ILB Central.
+
+curl -I -HHost:httpbin.example.com http://httpbin.query.consul/status/200
 ```
 
 ## Appendix

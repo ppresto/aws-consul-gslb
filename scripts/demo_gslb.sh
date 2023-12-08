@@ -192,7 +192,7 @@ usage() {
   exit 1; 
 }
 
-while getopts "drkc:" o; do
+while getopts "dukc:" o; do
   case "${o}" in
     d)
       TYPE="deploy"
@@ -234,6 +234,7 @@ if [[ ${TYPE} == "deploy" ]]; then
   register_alb
   deploy_myservice
   deploy_httpbin
+  #${SCRIPT_DIR}/../examples/peering/peer_dc1_to_dc2.sh -d
 elif [[ ${TYPE} == "remove" ]]; then
   echo "calling deregister_svc"
   deregister_svc
