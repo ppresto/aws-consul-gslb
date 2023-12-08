@@ -244,28 +244,28 @@ PreReq:
 * Keep all prepared Queries
 * Remove Peering connection
   ```
-  ../examples/peering/peer_dc1_to_dc2.sh -d
+  ../../examples/peering/peer_dc1_to_dc2.sh -d
   ```
 * Remove services (West) from ESM
   ```
-  ./scripts/demo_gslb.sh -c west -u
+  ../../scripts/demo_gslb.sh -c west -u
   ```
 * SSH to VM and verify Consul DNS for demo
 
 ### Review Environment
-* ./examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress.sh
+* ../..//examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress.sh
 * istio-gateway.yaml
 * httpbin-virtualservice.yaml
 * myservice-virtualservice.yaml
 ### Deploy and register services (West) to ESM
 ```
-./scripts/demo_gslb.sh -c west -d
+../..//scripts/demo_gslb.sh -c west -d
 ```
 
 ### Peer West to Central
 Review Peering UI before running script to create
 ```
-../examples/peering/peer_dc1_to_dc2.sh
+../../examples/peering/peer_dc1_to_dc2.sh
 ```
 
 ### Use SSH Session to validate DNS
