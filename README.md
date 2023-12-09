@@ -1,6 +1,6 @@
 # Use Consul to provide Global Service Load Balancing with a minimal footprint
 
-![Consul ESM](https://github.com/ppresto/aws-consul-esm/blob/main/consul-esm.png?raw=true)
+![Consul ESM](https://github.com/ppresto/aws-consul-esm/blob/main/corelogic-sd.png?raw=true)
 
 
 - [Use Consul to provide Global Service Load Balancing with a minimal footprint](#use-consul-to-provide-global-service-load-balancing-with-a-minimal-footprint)
@@ -18,6 +18,7 @@
   - [Validate Failover](#validate-failover)
   - [Clean Up](#clean-up)
   - [Quick Start - Demo Steps](#quick-start---demo-steps)
+    - [PreReq:](#prereq)
     - [Review Environment](#review-environment)
     - [Deploy and register services (West) to ESM](#deploy-and-register-services-west-to-esm)
     - [Peer West to Central](#peer-west-to-central)
@@ -238,7 +239,7 @@ terraform destroy -auto-approve
 ```
 
 ## Quick Start - Demo Steps
-PreReq:
+### PreReq:
 * Keep all services (Central) registered to ESM
 * Keep all prepared Queries
 * Remove Peering connection
