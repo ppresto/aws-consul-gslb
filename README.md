@@ -1,6 +1,6 @@
 # Use Consul to provide Global Service Load Balancing with a minimal footprint
 
-![Consul ESM](https://github.com/ppresto/aws-consul-esm/blob/main/corelogic-sd.png?raw=true)
+![Consul ESM](https://github.com/ppresto/aws-consul-gslb/blob/main/corelogic-sd.png?raw=true)
 
 
 - [Use Consul to provide Global Service Load Balancing with a minimal footprint](#use-consul-to-provide-global-service-load-balancing-with-a-minimal-footprint)
