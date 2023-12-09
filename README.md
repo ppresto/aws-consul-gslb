@@ -21,7 +21,6 @@
     - [Review Environment](#review-environment)
     - [Deploy and register services (West) to ESM](#deploy-and-register-services-west-to-esm)
     - [Peer West to Central](#peer-west-to-central)
-    - [Use SSH Session to validate DNS](#use-ssh-session-to-validate-dns)
       - [DNS and httpbin validation](#dns-and-httpbin-validation)
     - [Kill httpbin service (West) to show failover](#kill-httpbin-service-west-to-show-failover)
       - [Failover validation](#failover-validation)
@@ -251,15 +250,21 @@ PreReq:
   ../../scripts/demo_gslb.sh -c west -u
   ```
 * SSH to VM and verify Consul DNS for demo
+```
+BASTION=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-bastion"')
+IVM=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-vm1"')
+ssh-add /Users/patrickpresto/.ssh/ppresto-ptfe-dev-key.pem
+ssh -A -J ubuntu@${BASTION} ubuntu@${IVM}
+```
 
 ### Review Environment
-* ../..//examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress.sh
+* ../../examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress.sh
 * istio-gateway.yaml
 * httpbin-virtualservice.yaml
 * myservice-virtualservice.yaml
 ### Deploy and register services (West) to ESM
 ```
-../..//scripts/demo_gslb.sh -c west -d
+../../scripts/demo_gslb.sh -c west -d
 ```
 
 ### Peer West to Central
@@ -268,14 +273,8 @@ Review Peering UI before running script to create
 ../../examples/peering/peer_dc1_to_dc2.sh
 ```
 
-### Use SSH Session to validate DNS
-```
-BASTION=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-bastion"')
-IVM=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-vm1"')
-ssh-add /Users/patrickpresto/.ssh/ppresto-ptfe-dev-key.pem
-ssh -A -J ubuntu@${BASTION} ubuntu@${IVM}
-```
 #### DNS and httpbin validation
+Go to the SSH session on EC2 West instnace to verify DNS and routing
 ```
 curl http://httpbin.query.consul/status/200
 curl -I -HHost:httpbin.example.com http://httpbin.query.consul/status/200
