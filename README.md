@@ -250,12 +250,12 @@ PreReq:
   ../../scripts/demo_gslb.sh -c west -u
   ```
 * SSH to VM and verify Consul DNS for demo
-```
-BASTION=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-bastion"')
-IVM=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-vm1"')
-ssh-add /Users/patrickpresto/.ssh/ppresto-ptfe-dev-key.pem
-ssh -A -J ubuntu@${BASTION} ubuntu@${IVM}
-```
+  ```
+  BASTION=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-bastion"')
+  IVM=$(terraform output -json | jq -r '.usw2_ec2_ip.value."vpc1-vm1"')
+  ssh-add /Users/patrickpresto/.ssh/ppresto-ptfe-dev-key.pem
+  ssh -A -J ubuntu@${BASTION} ubuntu@${IVM}
+  ```
 
 ### Review Environment
 * ../../examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress.sh
