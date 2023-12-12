@@ -15,8 +15,6 @@
     - [Configure Consul DNS on EKS](#configure-consul-dns-on-eks)
   - [Setup Peering between both Datacenters for Failover](#setup-peering-between-both-datacenters-for-failover)
   - [Create Prepared Query](#create-prepared-query)
-  - [Validate Failover](#validate-failover)
-  - [Clean Up](#clean-up)
   - [Quick Start - Demo Steps](#quick-start---demo-steps)
     - [PreReq:](#prereq)
     - [Review Environment](#review-environment)
@@ -25,16 +23,10 @@
       - [DNS and httpbin validation](#dns-and-httpbin-validation)
     - [Kill httpbin service (West) to show failover](#kill-httpbin-service-west-to-show-failover)
       - [Failover validation](#failover-validation)
+  - [Clean Up](#clean-up)
   - [Appendix](#appendix)
-    - [Deploy ESM on Kubernetes with no Consul agents](#deploy-esm-on-kubernetes-with-no-consul-agents)
-      - [K8s deployment](#k8s-deployment)
-      - [Consul UI](#consul-ui)
-      - [Consul DNS](#consul-dns)
-      - [Deploy Fake-service to VM](#deploy-fake-service-to-vm)
-        - [Register fake-service (web)](#register-fake-service-web)
-        - [Deregister fake-service (web)](#deregister-fake-service-web)
+    - [Consul DNS](#consul-dns)
     - [Deploy ESM on VM with Consul agent](#deploy-esm-on-vm-with-consul-agent)
-    - [EKS -  Consul Helm Values](#eks----consul-helm-values)
 # aws-consul-gslbonly
 This repo builds the required AWS Networking and EKS resources
 
@@ -185,61 +177,10 @@ kubectl config set-context consul2
 ../../esm/prepared_query/deploy.sh
 ```
 
-## Validate Failover
-
-Go to each DC and lookup schema-registry.query.consul.  The local IP should be returned.
-```
-consul1
-kc exec statefulset/consul-server -- nslookup schema-registry.query.consul
-consul2
-kc exec statefulset/consul-server -- nslookup schema-registry.query.consul
-```
-
-SSH to vm1 and kill fake-service (ie: schema-registry)
-```
-ssh -A -J ubuntu@${bastion} ubuntu@${vm1}
-pkill fake-service
-exit
-```
-Wait a couple seconds ...
-ESM may take a couple seconds to identify the unhealthy instance depending on its configuration.  Once the UI shows `schema-registry` in dc1 failing test out the query in dc1 again.
-
-```
-consul1
-kc exec statefulset/consul-server -- nslookup web.query.consul
-```
-This time the IP returned should be the IP address of the `web` service in DC2.
-
-## Clean Up
-Remove the peering connection, consul-esm, web and learn ext monitors, and prepared queries.
-```
-../../esm/peering/peer_dc1_to_dc2.sh -d
-
-consul1
-../../esm/prepared_query/deploy.sh -d
-kubectl -n consul delete po -l component=client
-../../esm/k8s-with-agent/deploy.sh -d -f ../../esm/k8s-with-agent/svc-ext-dc1.json
-
-consul2
-../../esm/prepared_query/deploy.sh -d
-kubectl -n consul delete po -l component=client
-../../esm/k8s-with-agent/deploy.sh -d -f ../../esm/k8s-with-agent/svc-ext-dc2.json
-```
-
-Uninstall all Consul datacenters using Terraform's helm provider
-```
-cd consul_helm_values
-terraform destroy -auto-approve
-```
-
-Uninstall infrastructure
-```
-cd ../
-terraform destroy -auto-approve
-```
 
 ## Quick Start - Demo Steps
 ### PreReq:
+* Complete setup steps above
 * Keep all services (Central) registered to ESM
 * Keep all prepared Queries
 * Remove Peering connection
@@ -297,33 +238,36 @@ dig +short httpbin.query.consul
 curl -I -HHost:httpbin.example.com http://httpbin.query.consul/status/200
 ```
 
+## Clean Up
+Remove Consul Peering and PQ
+```
+../../examples/peering/peer_dc1_to_dc2.sh -d
+kubectl config set-context consul1
+../../examples/prepared_query/deploy.sh -d
+kubectl config set-context consul2
+../../examples/prepared_query/deploy.sh -d
+```
+Remove services
+```
+../../scripts/demo_gslb.sh -c west -u
+../../scripts/demo_gslb.sh -c central -u
+```
+
+Uninstall all Consul datacenters using Terraform's helm provider
+```
+cd quickstart/1vpc-4eks/consul_helm_values
+terraform destroy -auto-approve
+```
+
+Uninstall infrastructure
+```
+cd ../
+terraform destroy -auto-approve
+```
+
 ## Appendix
 
-### Deploy ESM on Kubernetes with no Consul agents
-#### K8s deployment
-Sample deployment files are available in `./k8s`.  Review `k8s/deploy.sh` to see the kubernetes objects that will be created in the k8s current-context.  Then run the script.
-
-```
-./deploy.sh
-```
-When running ESM in an agentless environment like K8s it needs to stick to a single Consul server to avoid healthcheck flapping.  Running ESM with an agent would avoid this and is covered in `./k8s-with-agent`.
-
-This script does the following:
-* creates a new consul-expose-server-0 endpoint that uses an Internal NLB to route to a single consul server.  
-* deploys the esm-service in the consul namespace.
-* Uses the secret: consul-ca-cert
-* Uses the secret: consul-bootstrap-acl-token
-* Uses the consul-expose-server-0 endpoint to route to a single Consul node
-* Registers an external service with healthchecks (default: learn.hashicorp.com)
-
-The new K8s endpoint may take a few minutes before its resolvable in DNS.  Wait a couple minutes...
-
-#### Consul UI
-Login to the consul UI to see the new ext svc and consul-esm svc registered.
-Click on the ext svc. It should be passing its health checks.
-The http-check should be returning 200 OK.
-
-#### Consul DNS
+### Consul DNS
 Setup Consul DNS on EKS to resolve the external service using Consul DNS.  Try the following Patch for a quick fix.
 ```
 ../scripts/patch_coredns_to_fwd_to_consul.sh
@@ -335,72 +279,6 @@ If Consul DNS is setup on EKS the new ext svc should now be resolveable from wit
 nslookup learn.service.consul
 ```
 
-#### Deploy Fake-service to VM
-In addition to the default `learn.hashicorp.com` example, you may want to verify something within your ecosystem.  Deploy fake-service to a VM that is outside K8s and not running a Consul agent so it acts as an external service.  In a new terminal ssh to the VM and do the following.
-```
-### Install fake-service
-mkdir -p ${HOME}/fake-service/{central_config,bin,logs}
-cd ${HOME}/fake-service/bin
-wget https://github.com/nicholasjackson/fake-service/releases/download/v0.23.1/fake_service_linux_amd64.zip
-unzip fake_service_linux_amd64.zip
-chmod 755 ${HOME}/fake-service/bin/fake-service
-```
-
-Create the start script
-```
-cat >${HOME}/fake-service/start.sh <<-EOF
-#!/bin/bash
-
-# Start Web Service
-export MESSAGE="Web RESPONSE"
-export NAME="web"
-export SERVER_TYPE="http"
-export LISTEN_ADDR="0.0.0.0:8080"
-nohup ./bin/fake-service > logs/fake-service.out 2>&1 &
-EOF
-```
-
-Start fake-service
-```
-chmod 755 ${HOME}/fake-service/start.sh
-cd ${HOME}/fake-service
-./start.sh
-```
-This service will listen on port 8080 so review the security groups to ensure its routable from ESM.
-
-##### Register fake-service (web)
-Go to the original terminal with access to EKS and kubectl do the following:
-```
-cd ./examples/esm/k8s
-```
-Edit `web-ext.json` and replace 3 things.
-* Node 
-* Address
-* Address in the http check definition
-
-Save the file and register the external service.
-```
-CONSUL_HTTP_TOKEN="$(kubectl -n consul get secret consul-bootstrap-acl-token -o json | jq -r '.data.token'| base64 -d)"
-CONSUL_HTTP_ADDR="$(kubectl -n consul get svc consul-expose-servers -o json | jq -r '.status.loadBalancer.ingress[].hostname'):8500"
-curl --silent --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" --request PUT --data @web-ext.json ${CONSUL_HTTP_ADDR}/v1/catalog/register
-```
-
-##### Deregister fake-service (web)
-```
-CONSUL_HTTP_TOKEN="$(kubectl -n consul get secret consul-bootstrap-acl-token -o json | jq -r '.data.token'| base64 -d)"
-CONSUL_HTTP_ADDR="$(kubectl -n consul get svc consul-expose-servers -o json | jq -r '.status.loadBalancer.ingress[].hostname'):8500"
-Node=$(cat web-ext.json | jq -r '.Node')
-Address=$(cat web-ext.json | jq -r '.Address')
-ServiceID=$(cat web-ext.json | jq -r '.Service.ID')
-
-#Deregister Service
-curl --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" --request PUT --data '{"Datacenter": "dc1","Node": "${Node}","ServiceID": "${ServiceID}"}' ${CONSUL_HTTP_ADDR}/v1/catalog/deregister
-
-#Deregister Node
-curl --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" --request PUT --data '{"Datacenter": "dc1","Node": "${Node}"}' ${CONSUL_HTTP_ADDR}/v1/catalog/deregister
-curl --header "X-Consul-Token: ${CONSUL_HTTP_TOKEN}" --request PUT --data '{"Node": "${Node}","Address": "${Address}"}' ${CONSUL_HTTP_ADDR}/v1/catalog/deregister
-
-```
 ### Deploy ESM on VM with Consul agent
 
 Get Consul Information and Secrets first.
@@ -520,96 +398,4 @@ EOF
 iptables --table nat --append OUTPUT --destination localhost --protocol udp --match udp --dport 53 --jump REDIRECT --to-ports 8600
 iptables --table nat --append OUTPUT --destination localhost --protocol tcp --match tcp --dport 53 --jump REDIRECT --to-ports 8600
 systemctl restart systemd-resolved
-```
-### EKS -  Consul Helm Values
-This chart installs Consul with the goal of supporting Service Discovery across multiple datacenters.  It enables connect-inject and mesh gateways to allow future Peering with remote Consul datacenters.  Peers can use Consul Prepared Queries for automatic failover of any service including onces monitored by ESM.
-```
-global:
-  name: consul
-  image: "hashicorp/consul-enterprise:1.16.0-ent"
-  imageK8S: docker.mirror.hashicorp.services/hashicorp/consul-k8s-control-plane:1.2.0
-  enableConsulNamespaces: true
-  enterpriseLicense:
-    secretName: 'consul-ent-license'
-    secretKey: 'key'
-    enableLicenseAutoload: true
-  datacenter: dc1
-  peering:
-    enabled: true
-  adminPartitions:
-    enabled: true
-    name: default
-
-  # TLS configures whether Consul components use TLS.
-  tls:
-    enabled: true
-    httpsOnly: false  # Metrics are exposed on 8500 only (http).  Anonymous policy requires Agent "read" if ACL enabled.
-    enableAutoEncrypt: true  #Required if gossipEncryption uses autoGenerate: true
-  acls:
-    manageSystemACLs: true
-  gossipEncryption:
-    autoGenerate: true
-  metrics:
-    enabled: true
-    enableGatewayMetrics: true
-    enableAgentMetrics: true
-    agentMetricsRetentionTime: "59m"
-
-server:
-  replicas: 3
-  bootstrapExpect: 3
-  exposeService:
-    enabled: true
-    type: LoadBalancer
-    annotations: |
-      service.beta.kubernetes.io/aws-load-balancer-type: "nlb-ip"
-  extraConfig: |
-    {
-      "log_level": "TRACE"
-    }
-  resources:
-    requests:
-      memory: "1461Mi" # 75% of 2GB Mem
-      cpu: "1000m"
-    limits:
-      memory: "1461Mi"
-      cpu: "1000m"
-dns:
-  enabled: true
-  enableRedirection: true
-
-syncCatalog:
-  enabled: true
-  toConsul: true
-  toK8S: false
-  k8sAllowNamespaces: ["*"]
-  k8sDenyNamespaces: []
-  consulNamespaces:
-    mirroringK8S: true
-
-# connectInject and meshGateway are required for Peering
-connectInject:
-  enabled: true
-  default: false
-meshGateway:
-  enabled: true
-  replicas: 1
-  service:
-    enabled: true
-    type: LoadBalancer
-    annotations: |
-      service.beta.kubernetes.io/aws-load-balancer-type: "nlb-ip"
-
-ui:
-  enabled: true
-  service:
-    enabled: true
-    type: LoadBalancer
-    annotations: |
-      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-  metrics:
-    enabled: true # by default, this inherits from the value global.metrics.enabled
-    provider: "prometheus"
-    baseURL: http://prometheus-server.default.svc.cluster.local
-    #baseURL: http://prometheus-server.metrics.svc.cluster.local
 ```
