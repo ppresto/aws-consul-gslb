@@ -244,8 +244,10 @@ Remove Consul Peering and PQ
 ../../examples/peering/peer_dc1_to_dc2.sh -d
 kubectl config set-context consul1
 ../../examples/prepared_query/deploy.sh -d
+../../examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress -d
 kubectl config set-context consul2
 ../../examples/prepared_query/deploy.sh -d
+../../examples/istio-ingress-gw/deploy-nodePort-gw-with-aws-ingress -d
 ```
 Remove services
 ```
@@ -276,7 +278,7 @@ Refer to Hashicorp docs for more information on setting up DNS forwarding.
 
 If Consul DNS is setup on EKS the new ext svc should now be resolveable from within EKS.
 ```
-nslookup learn.service.consul
+nslookup myservice.service.consul
 ```
 
 ### Deploy ESM on VM with Consul agent
